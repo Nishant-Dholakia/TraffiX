@@ -1,0 +1,9 @@
+langchain-community
+faiss-cpu 
+tiktoken
+python-dotenv
+pymupdf
+sentence_transformers
+langchain-huggingface
+fastapi
+uvicorn
