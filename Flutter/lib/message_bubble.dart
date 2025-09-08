@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:animated_text_kit/animated_text_kit.dart';
 
 class MessageBubble extends StatelessWidget {
   final String text;
   final bool isUser;
+  final Function(String)? onTranslate; // callback for translation
 
-  const MessageBubble({Key? key, required this.text, required this.isUser}) : super(key: key);
+  const MessageBubble({
+    Key? key,
+    required this.text,
+    required this.isUser,
+    this.onTranslate,
+  }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -18,25 +23,43 @@ class MessageBubble extends StatelessWidget {
           color: isUser ? Colors.blue : Colors.grey[300],
           borderRadius: BorderRadius.circular(12),
         ),
-        child: isUser
-            ? Text(
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            // ==== Message text ====
+            Flexible(
+              child: Text(
                 text,
-                style: const TextStyle(color: Colors.white),
-              )
-            : AnimatedTextKit(
-                totalRepeatCount: 1,
-                isRepeatingAnimation: false,
-                animatedTexts: [
-                  TypewriterAnimatedText(
-                    text,
-                    textStyle: const TextStyle(
-                      fontSize: 16,
-                      color: Colors.black,
-                    ),
-                    speed: const Duration(milliseconds: 50),
-                  ),
-                ],
+                style: TextStyle(
+                  color: isUser ? Colors.white : Colors.black,
+                  fontSize: 16,
+                ),
               ),
+            ),
+
+            // ==== Translate Dropdown (only for bot messages) ====
+            if (!isUser && onTranslate != null)
+              Padding(
+                padding: const EdgeInsets.only(left: 6.0),
+                child: PopupMenuButton<String>(
+                  icon: const Icon(
+                    Icons.translate,
+                    size: 20,
+                    color: Colors.black54,
+                  ),
+                  onSelected: (lang) => onTranslate!(lang),
+                  itemBuilder: (context) => const [
+                    PopupMenuItem(value: "en", child: Text("English")),
+                    PopupMenuItem(value: "hi", child: Text("Hindi")),
+                    PopupMenuItem(value: "fr", child: Text("French")),
+                    PopupMenuItem(value: "es", child: Text("Spanish")),
+                    PopupMenuItem(value: "gu", child: Text("Gujarati")),
+                  ],
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

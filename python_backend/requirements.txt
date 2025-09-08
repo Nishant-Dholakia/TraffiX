@@ -7,3 +7,7 @@ sentence_transformers
 langchain-huggingface
 fastapi
 uvicorn
+groq
+dotenv
+pyngrok
+deep-translator

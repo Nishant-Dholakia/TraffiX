@@ -1,5 +1,5 @@
 import os
-from fastapi import FastAPI
+from fastapi import FastAPI, Body
 from pydantic import BaseModel
 
 from helper import extract_text_from_pdf
@@ -7,12 +7,14 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_core.prompts import PromptTemplate
-from langchain_community.llms import Ollama
-from fastapi import Body
+import dotenv
+dotenv.load_dotenv()
+from fastapi.middleware.cors import CORSMiddleware
+from groq import Groq
+
+
 # === Initialize FastAPI ===
 app = FastAPI(title="Legal Q&A API")
-
-from fastapi.middleware.cors import CORSMiddleware
 
 app.add_middleware(
     CORSMiddleware,
@@ -60,25 +62,39 @@ else:
 retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 5})
 
 # === Prompt template ===
+from langchain_core.prompts import PromptTemplate
+
 prompt_template = PromptTemplate(
     input_variables=["context", "question"],
     template="""
-You are a legal expert. Based on the following context from the Motor Vehicles Act, answer the question.
+You are a legal expert specializing in the Motor Vehicles Act. 
+Answer the user's question strictly using the information provided in the Act. 
 
-Context:
+Rules:
+1. If the answer is present, provide a clear and concise response.
+2. If the answer cannot be found, respond only with: 
+   "I am unable to find relevant information in the Motor Vehicles Act to answer this question."
+3. Do not add any extra details or assumptions beyond the Act.
+
+Excerpt from the Motor Vehicles Act:
 {context}
 
 Question:
 {question}
 
-Answer:"""
+Answer:
+"""
 )
 
-llm = Ollama(model="llama3.2")
+
+# === Initialize Groq client ===
+client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+
 
 # === Request body schema ===
 class QueryRequest(BaseModel):
     question: str
+
 
 # === API Endpoint ===
 @app.post("/ask")
@@ -92,18 +108,43 @@ def ask_question(request: QueryRequest = Body(...)):
     # build prompt
     final_prompt = prompt_template.format(context=context, question=question)
 
-    # query LLM
-    response = llm.invoke(final_prompt)
+    # query Groq LLM
+    completion = client.chat.completions.create(
+        model="openai/gpt-oss-120b",  # ✅ model you chose
+        messages=[{"role": "user", "content": final_prompt}],
+        temperature=1,
+        max_completion_tokens=1024,
+        top_p=1,
+        reasoning_effort="medium",
+        stream=False,  # ❌ not streaming here, easier for API response
+    )
 
-    return {"question": question, "answer": response}
+    # Extract answer
+    answer = completion.choices[0].message.content
 
+    return {"question": question, "answer": answer}
 
-from pyngrok import ngrok
+class TranslateRequest(BaseModel):
+    text: str
+    target_lang: str
+
+from deep_translator import GoogleTranslator
+
+class TranslateRequest(BaseModel):
+    text: str
+    target_lang: str
+
+@app.post("/translate")
+def translate_text(req: TranslateRequest):
+    try:
+        translated_text = GoogleTranslator(
+            source='auto', target=req.target_lang
+        ).translate(req.text)
+        return {"translated_text": translated_text}
+    except Exception as e:
+        return {"error": str(e)}
 
 if __name__ == "__main__":
-    # Open ngrok tunnel
-    public_url = ngrok.connect(8000)
-    print("Public URL:", public_url)
 
     import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)

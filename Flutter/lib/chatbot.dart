@@ -5,7 +5,6 @@ import 'message_bubble.dart';
 import 'typing_indicator.dart';
 import 'soundplay.dart';
 
-
 class ChatBot extends StatefulWidget {
   const ChatBot({Key? key}) : super(key: key);
 
@@ -17,6 +16,7 @@ class _ChatBotState extends State<ChatBot> {
   final TextEditingController _controller = TextEditingController();
   final List<Map<String, String>> _messages = [];
   bool _isTyping = false;
+  bool _isLoading = false;
 
   Future<void> sendMessage() async {
     final message = _controller.text.trim();
@@ -25,12 +25,13 @@ class _ChatBotState extends State<ChatBot> {
     setState(() {
       _messages.add({"sender": "user", "text": message});
       _isTyping = true;
+      _isLoading = true;
     });
     _controller.clear();
     SoundManager.playSend();
 
     final response = await http.post(
-      Uri.parse("https://5cb8154cdd29.ngrok-free.app/ask"),
+      Uri.parse("https://aade1571e0f5.ngrok-free.app/ask"),
       headers: {"Content-Type": "application/json"},
       body: json.encode({"question": message}),
     );
@@ -39,56 +40,107 @@ class _ChatBotState extends State<ChatBot> {
       final data = json.decode(response.body);
       setState(() {
         _isTyping = false;
+        _isLoading = false;
         _messages.add({"sender": "bot", "text": data["answer"]});
       });
       SoundManager.playReceive();
     } else {
       setState(() {
         _isTyping = false;
+        _isLoading = false;
         _messages.add({"sender": "bot", "text": "Error: Could not connect"});
+      });
+    }
+  }
+
+  Future<void> translateMessage(int index, String targetLang) async {
+    final originalText = _messages[index]["text"];
+    setState(() {
+      _isLoading = true;
+    });
+
+    final response = await http.post(
+      Uri.parse("https://aade1571e0f5.ngrok-free.app/translate"),
+      headers: {"Content-Type": "application/json"},
+      body: json.encode({"text": originalText, "target_lang": targetLang}),
+    );
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      setState(() {
+        _messages[index]["text"] = " ${data['translated_text']}";
+        _isLoading = false;
+      });
+    } else {
+      setState(() {
+        _messages[index]["text"] = "Translation failed";
+        _isLoading = false;
       });
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    return Stack(
       children: [
-        Expanded(
-          child: ListView.builder(
-            itemCount: _messages.length + (_isTyping ? 1 : 0),
-            itemBuilder: (context, index) {
-              if (_isTyping && index == _messages.length) {
-                return const TypingIndicator();
-              }
-              final msg = _messages[index];
-              final isUser = msg["sender"] == "user";
-              return MessageBubble(text: msg["text"]!, isUser: isUser);
-            },
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _controller,
-                  decoration: InputDecoration(
-                    hintText: "Type a message...",
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
+        Column(
+          children: [
+            Expanded(
+              child: ListView.builder(
+                itemCount: _messages.length + (_isTyping ? 1 : 0),
+                itemBuilder: (context, index) {
+                  if (_isTyping && index == _messages.length) {
+                    return const TypingIndicator();
+                  }
+
+                  final msg = _messages[index];
+                  final isUser = msg["sender"] == "user";
+
+                  return MessageBubble(
+                    text: msg["text"]!,
+                    isUser: isUser,
+                    onTranslate: isUser
+                        ? null
+                        : (lang) => translateMessage(index, lang),
+                  );
+                },
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _controller,
+                      decoration: InputDecoration(
+                        hintText: "Type a message...",
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
                     ),
                   ),
-                ),
+                  IconButton(
+                    icon: const Icon(Icons.send),
+                    onPressed: sendMessage,
+                  )
+                ],
               ),
-              IconButton(
-                icon: const Icon(Icons.send),
-                onPressed: sendMessage,
-              )
-            ],
+            )
+          ],
+        ),
+
+        // Loader overlay
+        if (_isLoading)
+          Container(
+            color: Colors.black54,
+            child: const Center(
+              child: CircularProgressIndicator(
+                color: Colors.white,
+              ),
+            ),
           ),
-        )
       ],
     );
   }
