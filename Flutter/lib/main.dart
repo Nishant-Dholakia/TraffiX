@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'chatbot.dart';
-
+import 'Home.dart';
 void main() {
   runApp(const MyApp());
 }
@@ -15,8 +14,7 @@ class MyApp extends StatelessWidget {
       title: 'ChatBot App',
       theme: ThemeData(primarySwatch: Colors.blue),
       home: Scaffold(
-        appBar: AppBar(title: Text("ChatBot")),
-        body: const ChatBot(),
+        body: const TrafficApp(),
       ),
     );
   }

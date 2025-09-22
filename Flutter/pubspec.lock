@@ -166,6 +166,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "6.0.0"
+  flutter_moving_background:
+    dependency: "direct main"
+    description:
+      name: flutter_moving_background
+      sha256: b2264100cd328c0e92e08538f5bbb2406add6403331c573e0df03bdb2eabc019
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.0.5"
   flutter_test:
     dependency: "direct dev"
     description: flutter
