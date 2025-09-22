@@ -6,11 +6,11 @@ class MessageBubble extends StatelessWidget {
   final Function(String)? onTranslate; // callback for translation
 
   const MessageBubble({
-    Key? key,
+    super.key,
     required this.text,
     required this.isUser,
     this.onTranslate,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
