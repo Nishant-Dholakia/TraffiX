@@ -11,3 +11,11 @@ groq
 dotenv
 pyngrok
 deep-translator
+chromadb
+#for mcp
+langchain-groq
+langchain-mcp-adapters
+mcp
+langgraph 
+
+fastapi_mcp
