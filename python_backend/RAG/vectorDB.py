@@ -2,22 +2,27 @@ import os
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import Chroma
-import sys, os
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 from RAG.helper import extract_text_from_pdf
-
+import os
 
 # === Paths ===
-text_file_path = "data/vehicle-act.txt"
-chroma_path = "vector_store/chroma_index"
+base_dir = os.path.dirname(os.path.abspath(__file__))  
+base_dir = os.path.dirname(base_dir)
+print(base_dir)
+text_file_path = os.path.join(base_dir, "data", "motor_vehicles_act.txt")
+chroma_path = os.path.join(base_dir, "vector_store", "chroma_index")
+pdf_path = os.path.join(base_dir, "vehicle-act.pdf")
+os.makedirs(chroma_path, exist_ok=True)
+
+
 
 
 def load_or_create_vectordb():
     # === STEP 1: Load or extract text ===
     if not os.path.exists(text_file_path):
         print("Extracting text from PDF...")
-        text = extract_text_from_pdf("vehicle-act.pdf")
+        text = extract_text_from_pdf(pdf_path)
         os.makedirs("data", exist_ok=True)
         with open(text_file_path, "w", encoding="utf-8") as f:
             f.write(text)
