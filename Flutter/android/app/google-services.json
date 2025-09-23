@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "796483662542",
+    "project_id": "traffix-app-ac817",
+    "storage_bucket": "traffix-app-ac817.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:796483662542:android:09d0ba4c95add7f135169f",
+        "android_client_info": {
+          "package_name": "com.app.traffix"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDWWBDZmKtgo0-iHRWb920TAIAFMuAVaXI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:796483662542:android:39e71b96809b484535169f",
+        "android_client_info": {
+          "package_name": "com.example.traffix"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDWWBDZmKtgo0-iHRWb920TAIAFMuAVaXI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

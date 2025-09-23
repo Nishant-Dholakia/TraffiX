@@ -7,10 +7,12 @@ import 'soundplay.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:flutter_moving_background/flutter_moving_background.dart';
 import 'package:flutter_moving_background/enums/animation_types.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import './screens/auth/login_screen.dart'; // Make sure you have a login page
 
 class ChatBot extends StatefulWidget {
-  final String? initialMessage; // Accept initial message
-
+  final String? initialMessage;
   const ChatBot({super.key, this.initialMessage});
 
   @override
@@ -27,16 +29,59 @@ class _ChatBotState extends State<ChatBot> {
   late stt.SpeechToText _speech;
   bool _isListening = false;
 
+  final User? user = FirebaseAuth.instance.currentUser;
+
   @override
   void initState() {
     super.initState();
     _speech = stt.SpeechToText();
 
-    // If initialMessage exists, send it automatically
+    if (user != null) {
+      _loadChatHistory();
+    }
+
     if (widget.initialMessage != null && widget.initialMessage!.isNotEmpty) {
       _controller.text = widget.initialMessage!;
       Future.delayed(const Duration(milliseconds: 100), () => sendMessage());
     }
+  }
+
+  /// Store message in Firestore
+  Future<void> storeMessage(String sender, String text) async {
+    if (user == null) return;
+
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user!.uid)
+        .collection('messages')
+        .add({
+      'sender': sender,
+      'text': text,
+      'timestamp': FieldValue.serverTimestamp(),
+    });
+  }
+
+  /// Load chat history from Firestore
+  Future<void> _loadChatHistory() async {
+    final snapshot = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user!.uid)
+        .collection('messages')
+        .orderBy('timestamp', descending: false)
+        .get();
+
+    final history = snapshot.docs.map((doc) {
+      return {
+        'sender': doc['sender'] as String,
+        'text': doc['text'] as String,
+      };
+    }).toList();
+
+    setState(() {
+      _messages.addAll(history);
+    });
+
+    _scrollToBottom();
   }
 
   void _scrollToBottom() {
@@ -75,23 +120,18 @@ class _ChatBotState extends State<ChatBot> {
     if (_isListening) {
       _speech.stop();
       setState(() => _isListening = false);
-
-      // Add a small delay to ensure speech recognition has finished processing
       await Future.delayed(const Duration(milliseconds: 100));
     }
 
     final message = _controller.text.trim();
     if (message.isEmpty) return;
 
-    // Clear input
     _controller.clear();
-    _controller.selection = const TextSelection.collapsed(offset: 0);
     FocusScope.of(context).unfocus();
     Future.delayed(const Duration(milliseconds: 50), () {
       _focusNode.requestFocus();
     });
 
-    // Add user message
     setState(() {
       _messages.add({"sender": "user", "text": message});
       _isTyping = true;
@@ -99,6 +139,8 @@ class _ChatBotState extends State<ChatBot> {
     });
     SoundManager.playSend();
     _scrollToBottom();
+
+    await storeMessage("user", message);
 
     try {
       final response = await http.post(
@@ -109,13 +151,18 @@ class _ChatBotState extends State<ChatBot> {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
+        final botReply = data["answer"];
+
         setState(() {
           _isTyping = false;
           _isLoading = false;
-          _messages.add({"sender": "bot", "text": data["answer"]});
+          _messages.add({"sender": "bot", "text": botReply});
         });
         SoundManager.playReceive();
         _scrollToBottom();
+
+        await storeMessage("bot", botReply);
+
       } else {
         setState(() {
           _isTyping = false;
@@ -169,12 +216,31 @@ class _ChatBotState extends State<ChatBot> {
     _scrollToBottom();
   }
 
+  /// Logout
+  Future<void> _logout() async {
+    await FirebaseAuth.instance.signOut();
+    if (!mounted) return;
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        title: const Text("LingoSnap Chat"),
+        backgroundColor: Colors.blue,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout),
+            onPressed: _logout,
+            tooltip: "Logout",
+          )
+        ],
+      ),
       body: Stack(
         children: [
-          // Moving Background as full screen background
           MovingBackground(
             duration: const Duration(seconds: 2),
             animationType: AnimationType.mixed,
@@ -185,76 +251,75 @@ class _ChatBotState extends State<ChatBot> {
               MovingCircle(color: Colors.grey),
               MovingCircle(color: Colors.lightBlue),
             ],
-          child:(
-          // Chat content on top of the background
-          Column(
-            children: [
-              Expanded(
-                child: ListView.builder(
-                  controller: _scrollController,
-                  itemCount: _messages.length + (_isTyping ? 1 : 0),
-                  itemBuilder: (context, index) {
-                    if (_isTyping && index == _messages.length) {
-                      return const TypingIndicator();
-                    }
+            child: Column(
+              children: [
+                Expanded(
+                  child: ListView.builder(
+                    controller: _scrollController,
+                    itemCount: _messages.length + (_isTyping ? 1 : 0),
+                    itemBuilder: (context, index) {
+                      if (_isTyping && index == _messages.length) {
+                        return const TypingIndicator();
+                      }
 
-                    final msg = _messages[index];
-                    final isUser = msg["sender"] == "user";
+                      final msg = _messages[index];
+                      final isUser = msg["sender"] == "user";
 
-                    return MessageBubble(
-                      text: msg["text"]!,
-                      isUser: isUser,
-                      onTranslate: isUser ? null : (lang) => translateMessage(index, lang),
-                    );
-                  },
-                ),
-              ),
-              // Input area
-              Container(
-                color: Colors.black.withOpacity(0.7),
-                child: Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _controller,
-                          focusNode: _focusNode,
-                          style: const TextStyle(color: Colors.white),
-                          decoration: InputDecoration(
-                            hintText: "Type or speak...",
-                            hintStyle: const TextStyle(color: Colors.white70),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: const BorderSide(color: Colors.white54),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: const BorderSide(color: Colors.white),
-                            ),
-                            filled: true,
-                            fillColor: Colors.black.withOpacity(0.3),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      IconButton(
-                        icon: Icon(
-                          _isListening ? Icons.mic : Icons.mic_none,
-                          color: _isListening ? Colors.red : Colors.white,
-                        ),
-                        onPressed: _listen,
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.send, color: Colors.white),
-                        onPressed: sendMessage,
-                      ),
-                    ],
+                      return MessageBubble(
+                        text: msg["text"]!,
+                        isUser: isUser,
+                        onTranslate: isUser
+                            ? null
+                            : (lang) => translateMessage(index, lang),
+                      );
+                    },
                   ),
                 ),
-              ),
-            ],
-          )),
+                Container(
+                  color: Colors.black.withOpacity(0.7),
+                  child: Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _controller,
+                            focusNode: _focusNode,
+                            style: const TextStyle(color: Colors.white),
+                            decoration: InputDecoration(
+                              hintText: "Type or speak...",
+                              hintStyle: const TextStyle(color: Colors.white70),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: const BorderSide(color: Colors.white54),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: const BorderSide(color: Colors.white),
+                              ),
+                              filled: true,
+                              fillColor: Colors.black.withOpacity(0.3),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          icon: Icon(
+                            _isListening ? Icons.mic : Icons.mic_none,
+                            color: _isListening ? Colors.red : Colors.white,
+                          ),
+                          onPressed: _listen,
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.send, color: Colors.white),
+                          onPressed: sendMessage,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
           if (_isLoading)
             Container(
