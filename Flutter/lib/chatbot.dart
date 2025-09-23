@@ -229,7 +229,7 @@ class _ChatBotState extends State<ChatBot> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("LingoSnap Chat"),
+        title: const Text("Traffix Chat"),
         backgroundColor: Colors.blue,
         actions: [
           IconButton(
