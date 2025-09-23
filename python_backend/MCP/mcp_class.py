@@ -69,7 +69,7 @@ class MCPAgent:
                 query.strip()
                 + "\nAnswer as per the Motor Vehicles Act in India."
                 " If answer is based on previous context, ensure it's relevant."
-                + " otherwise refuse it"
+                + " otherwise refuse it" + " provide answer in concise manner."
             )
             
             self.conversation_history.append(HumanMessage(content=new_prompt))
