@@ -32,10 +32,6 @@ async def mcp_server():
         # === Agent ===
         agent = create_react_agent(model=model, tools=tools)
 
-        print("✅ MCP Agent ready! Type 'exit' to quit.")
-        print("Type 'clear' to reset conversation history.")
-        print("Type 'history' to see the conversation history.")
-
         # === Conversation history ===
         conversation_history: list = []
 

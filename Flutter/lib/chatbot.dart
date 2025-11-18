@@ -5,11 +5,9 @@ import 'message_bubble.dart';
 import 'typing_indicator.dart';
 import 'soundplay.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
-import 'package:flutter_moving_background/flutter_moving_background.dart';
-import 'package:flutter_moving_background/enums/animation_types.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import './screens/auth/login_screen.dart'; // Make sure you have a login page
+import './screens/auth/login_screen.dart';
 
 class ChatBot extends StatefulWidget {
   final String? initialMessage;
@@ -36,6 +34,9 @@ class _ChatBotState extends State<ChatBot> {
     super.initState();
     _speech = stt.SpeechToText();
 
+    print("▶ ChatBot Loaded");
+    print("User logged in: ${user?.uid}");
+
     if (user != null) {
       _loadChatHistory();
     }
@@ -46,9 +47,10 @@ class _ChatBotState extends State<ChatBot> {
     }
   }
 
-  /// Store message in Firestore
   Future<void> storeMessage(String sender, String text) async {
     if (user == null) return;
+
+    print("📩 Storing message: $sender -> $text");
 
     await FirebaseFirestore.instance
         .collection('users')
@@ -61,14 +63,17 @@ class _ChatBotState extends State<ChatBot> {
     });
   }
 
-  /// Load chat history from Firestore
   Future<void> _loadChatHistory() async {
+    print("📚 Loading chat history...");
+
     final snapshot = await FirebaseFirestore.instance
         .collection('users')
         .doc(user!.uid)
         .collection('messages')
         .orderBy('timestamp', descending: false)
         .get();
+
+    print("📚 Loaded ${snapshot.docs.length} messages");
 
     final history = snapshot.docs.map((doc) {
       return {
@@ -98,19 +103,18 @@ class _ChatBotState extends State<ChatBot> {
 
   Future<void> _listen() async {
     if (!_isListening) {
+      print("🎙 Starting voice recognition...");
       bool available = await _speech.initialize();
       if (available) {
         setState(() => _isListening = true);
         _speech.listen(onResult: (result) {
           setState(() {
             _controller.text = result.recognizedWords;
-            _controller.selection = TextSelection.fromPosition(
-              TextPosition(offset: _controller.text.length),
-            );
           });
         });
       }
     } else {
+      print("🛑 Stopped listening.");
       setState(() => _isListening = false);
       _speech.stop();
     }
@@ -120,84 +124,99 @@ class _ChatBotState extends State<ChatBot> {
     if (_isListening) {
       _speech.stop();
       setState(() => _isListening = false);
-      await Future.delayed(const Duration(milliseconds: 100));
     }
 
     final message = _controller.text.trim();
     if (message.isEmpty) return;
 
+    print("📤 Sending message: $message");
+
     _controller.clear();
     FocusScope.of(context).unfocus();
-    Future.delayed(const Duration(milliseconds: 50), () {
-      _focusNode.requestFocus();
-    });
 
     setState(() {
       _messages.add({"sender": "user", "text": message});
       _isTyping = true;
       _isLoading = true;
     });
+
     SoundManager.playSend();
     _scrollToBottom();
 
     await storeMessage("user", message);
 
     try {
+      print("🌐 Calling API: /ask");
+
       final response = await http.post(
-        Uri.parse("http://127.0.0.1:8000/ask"),
+        Uri.parse("http://localhost:8000/ask"),
         headers: {"Content-Type": "application/json"},
         body: json.encode({"question": message}),
       );
 
+      print("🌐 Status: ${response.statusCode}");
+      print("🌐 Response body: ${response.body}");
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         final botReply = data["answer"];
+
+        print("🤖 Bot reply: $botReply");
 
         setState(() {
           _isTyping = false;
           _isLoading = false;
           _messages.add({"sender": "bot", "text": botReply});
         });
+
         SoundManager.playReceive();
         _scrollToBottom();
 
         await storeMessage("bot", botReply);
 
       } else {
+        print("❌ API error: ${response.statusCode}");
         setState(() {
           _isTyping = false;
           _isLoading = false;
           _messages.add({"sender": "bot", "text": "Error: Could not connect"});
         });
-        _scrollToBottom();
       }
     } catch (e) {
+      print("🔥 Exception: $e");
+
       setState(() {
         _isTyping = false;
         _isLoading = false;
         _messages.add({"sender": "bot", "text": "Error: $e"});
       });
-      _scrollToBottom();
     }
+
+    _scrollToBottom();
   }
 
   Future<void> translateMessage(int index, String targetLang) async {
     final originalText = _messages[index]["text"];
+    print("🌐 Translating text: $originalText to $targetLang");
+
     setState(() {
       _isLoading = true;
     });
 
     try {
       final response = await http.post(
-        Uri.parse("http://127.0.0.1:8000/translate"),
+        Uri.parse("http://localhost:8000/translate"),
         headers: {"Content-Type": "application/json"},
         body: json.encode({"text": originalText, "target_lang": targetLang}),
       );
 
+      print("🌐 Translate Status: ${response.statusCode}");
+      print("🌐 Translate Response: ${response.body}");
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         setState(() {
-          _messages[index]["text"] = " ${data['translated_text']}";
+          _messages[index]["text"] = data['translated_text'];
           _isLoading = false;
         });
       } else {
@@ -206,7 +225,9 @@ class _ChatBotState extends State<ChatBot> {
           _isLoading = false;
         });
       }
-    } catch (_) {
+    } catch (e) {
+      print("🔥 Translate Error: $e");
+
       setState(() {
         _messages[index]["text"] = "Translation failed";
         _isLoading = false;
@@ -216,10 +237,12 @@ class _ChatBotState extends State<ChatBot> {
     _scrollToBottom();
   }
 
-  /// Logout
   Future<void> _logout() async {
+    print("🚪 Logging out...");
     await FirebaseAuth.instance.signOut();
+
     if (!mounted) return;
+
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(builder: (_) => const LoginScreen()),
     );
@@ -235,22 +258,14 @@ class _ChatBotState extends State<ChatBot> {
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: _logout,
-            tooltip: "Logout",
           )
         ],
       ),
+
       body: Stack(
         children: [
-          MovingBackground(
-            duration: const Duration(seconds: 2),
-            animationType: AnimationType.mixed,
-            backgroundColor: Colors.white,
-            circles: const [
-              MovingCircle(color: Colors.purple),
-              MovingCircle(color: Colors.blueAccent),
-              MovingCircle(color: Colors.grey),
-              MovingCircle(color: Colors.lightBlue),
-            ],
+          Container(
+            color: Colors.white,
             child: Column(
               children: [
                 Expanded(
@@ -275,59 +290,55 @@ class _ChatBotState extends State<ChatBot> {
                     },
                   ),
                 ),
+
                 Container(
                   color: Colors.black.withOpacity(0.7),
-                  child: Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _controller,
-                            focusNode: _focusNode,
-                            style: const TextStyle(color: Colors.white),
-                            decoration: InputDecoration(
-                              hintText: "Type or speak...",
-                              hintStyle: const TextStyle(color: Colors.white70),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: const BorderSide(color: Colors.white54),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: const BorderSide(color: Colors.white),
-                              ),
-                              filled: true,
-                              fillColor: Colors.black.withOpacity(0.3),
+                  padding: const EdgeInsets.all(8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _controller,
+                          focusNode: _focusNode,
+                          style: const TextStyle(color: Colors.white),
+                          decoration: InputDecoration(
+                            hintText: "Type or speak...",
+                            hintStyle: const TextStyle(color: Colors.white70),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
                             ),
+                            fillColor: Colors.black.withOpacity(0.3),
+                            filled: true,
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        IconButton(
-                          icon: Icon(
-                            _isListening ? Icons.mic : Icons.mic_none,
-                            color: _isListening ? Colors.red : Colors.white,
-                          ),
-                          onPressed: _listen,
+                      ),
+
+                      IconButton(
+                        icon: Icon(
+                          _isListening ? Icons.mic : Icons.mic_none,
+                          color: _isListening ? Colors.red : Colors.white,
                         ),
-                        IconButton(
-                          icon: const Icon(Icons.send, color: Colors.white),
-                          onPressed: sendMessage,
-                        ),
-                      ],
-                    ),
+                        onPressed: _listen,
+                      ),
+
+                      IconButton(
+                        icon: const Icon(Icons.send, color: Colors.white),
+                        onPressed: sendMessage,
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
           ),
+
           if (_isLoading)
             Container(
               color: Colors.black54,
               child: const Center(
                 child: CircularProgressIndicator(color: Colors.white),
               ),
-            ),
+            )
         ],
       ),
     );

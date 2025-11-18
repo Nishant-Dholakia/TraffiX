@@ -65,6 +65,7 @@ class Message(BaseModel):
 # === API Routes ===
 @app.post("/ask")
 async def ask_question(req: QueryRequest):
+    print("hey")
     """Process a legal question using MCP agent"""
     try:
         response = await app.state.agent.process_query(req.question)
@@ -100,6 +101,7 @@ async def translate_text(req: TranslateRequest):
             "target_language": req.target_lang
         }
     except Exception as e:
+        print(e)
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/tools")
